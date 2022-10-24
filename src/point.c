@@ -39,15 +39,20 @@ SPoint initSPoint(SPoint sp, float x, float y) {
 }
 
 // inline ?
-float euclidianDistance(struct spoint a, struct spoint b) {
+float spoint_euclidianDistance(struct spoint a, struct spoint b) {
 
-    return sqrt1(
-        squared(b.y - a.y) + squared(b.x - a.x)
-    );
+    float x = b.x-a.x;
+    float y = b.y-a.y;
+    return sqrt(y*y + x*x);
 }
 
+int minFloat(float a, float b) {
+    return a<=b;
+}
+
+
 // esta será mais lenta porque tem de aceder ao apontador para chegar à variavel
-float euclidianDistanceP(SPoint a, SPoint b) {
+float SPoint_euclidianDistance(SPoint a, SPoint b) {
 
     return sqrt1(
         squared(b->y - a->y) + squared(b->x - a->x)

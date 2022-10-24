@@ -4,10 +4,10 @@
 #include "point.h"
 extern const int CSIZE;
 
-struct cluster {
+struct __attribute__ ((__packed__, __aligned__(8))) cluster {
 
     int dimension;
-    struct spoint centroid;
+    struct __attribute__ ((__packed__, __aligned__(8))) spoint centroid;
 };
 
 typedef struct cluster *Cluster;
