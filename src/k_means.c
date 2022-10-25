@@ -139,7 +139,7 @@ void update_centroids() {
     */
 
     // initialize means array
-    int index = 0;
+    int index = 0, dimension = 0;
     for (i = 0; i < K*2; MEANS_ARRAY[i] = 0.0f, i++);
 
     struct spoint p;
@@ -147,17 +147,15 @@ void update_centroids() {
     // for each of the samples
     for (i = 0; i < N; i++) {
 
-        p = RANDOM_SAMPLE[i];
-        index = p.k + p.k;
+        p=RANDOM_SAMPLE[i];
+        index = p.k * 2;
         MEANS_ARRAY[index] += p.x;
-        MEANS_ARRAY[index + 1] += p.y;
+        MEANS_ARRAY[index+1] += p.y;
 
         // k = 0, 0 1
         // k = 1, 2 3
         // k = 2, 4 5
     }
-
-    int dimension = 0.0;
 
     // for each cluster, calculate the new centroid
     for (i = 0; i < K; i++) {
