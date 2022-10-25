@@ -79,18 +79,14 @@ int update_samples() {
     #pragma omp simd
     for (i = 0; i < N; i++) {
 
+        minDist = INT_MAX;
         // get current point
         p = *(RANDOM_SAMPLE+i);
-        
-        // default values for minimum calculation
-        
-        minDist = INT_MAX;
         minK = p.k;
+        // default values for minimum calculation
 
         // for each of the *other* clusters
         for (j = 0; j < K; j++) {
-
-            
             // calculate the euclidian distance
             //dist = euclidianDistance(p, (CLUSTERS[j]).centroid);
             dist = euclidian_distance(p.x, p.y, CLUSTERS[j].x, CLUSTERS[j].y);
