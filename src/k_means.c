@@ -71,23 +71,21 @@ int update_samples() {
 
     // auxiliar variables
     float minDist = FLT_MAX, dist = 0.0f, x=0.0f, y=0.0f;
-    int minK = INT_MAX, minK2 = INT_MAX, changes_flag = 0;
-    struct spoint p = {0}, p1 = {0}, c= {0};
+    int minK = INT_MAX, changes_flag = 0;
+    struct spoint p = {0}, c= {0};
 
 
     // for each of the samples
     #pragma omp simd
-    for (i = 0; i < N; i+2) {
+    for (i = 0; i < N; i++) {
 
         // get current point
         p = *(RANDOM_SAMPLE+i);
-        p1 = *(RANDOM_SAMPLE+i+1);
         
         // default values for minimum calculation
         
         minDist = INT_MAX;
         minK = p.k;
-        minK2 = p1.k;
 
         // for each of the *other* clusters
         for (j = 0; j < K; j++) {
@@ -104,15 +102,6 @@ int update_samples() {
                 minDist = dist;
                 minK = j;
             }
-
-            dist = euclidian_distance(p1.x, p1.y, CLUSTERS[j].x, CLUSTERS[j].y);
-
-            if (dist < minDist) {
-
-                // update the minimum distance and it's associated cluster
-                minDist = dist;
-                minK2 = j;
-            }
             
         }
 
@@ -128,21 +117,6 @@ int update_samples() {
 
             // update point's cluster
             (RANDOM_SAMPLE[i]).k = minK;
-            changes_flag = 1;
-        }
-
-        if (minK2 != (p1.k)) {
-            
-            // assuming k will always be >= 0
-            // update previous cluster
-            if (p1.k != -1)
-                (CLUSTERS[p1.k]).dimension--;
-
-            // update newer cluster
-            (CLUSTERS[minK2]).dimension++;
-
-            // update point's cluster
-            (RANDOM_SAMPLE[i+1]).k = minK2;
             changes_flag = 1;
         }
         
