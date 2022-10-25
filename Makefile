@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc-7
 BIN = bin/
 SRC = src/
 INCLUDES = include/

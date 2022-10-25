@@ -140,7 +140,9 @@ void update_centroids() {
 
     // initialize means array
     int index = 0, dimension = 0;
-    for (i = 0; i < K*2; MEANS_ARRAY[i] = 0.0f, i++);
+    for (i = 0; i < K*2; i++) {
+        MEANS_ARRAY[i] = 0.0f;
+    }
 
     struct spoint p;
 
@@ -166,8 +168,9 @@ void update_centroids() {
 
         // mean calculation
         //printf("\n#> dimension %d, index %d, %.5f, %.5f", dimension, index, (CLUSTERS[i].centroid).x, (CLUSTERS[i].centroid).y);
-        (CLUSTERS[i].centroid).x = MEANS_ARRAY[index] * (1.0f/dimension); 
-        (CLUSTERS[i].centroid).y = MEANS_ARRAY[index + 1] * (1.0f/dimension);
+        (CLUSTERS[i].centroid).x = MEANS_ARRAY[index] / (float)dimension; 
+        (CLUSTERS[i].centroid).y = MEANS_ARRAY[index + 1] / (float)dimension;
+
 
     }
 
@@ -202,6 +205,8 @@ int main() {
         }
 
     } while (end_flag);
+    
+    
     clock_t end = clock();
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     printf("\n#> time:%.5f\n", time_spent);
