@@ -7,7 +7,7 @@ extern const int CSIZE;
 struct __attribute__ ((__packed__, __aligned__(8))) cluster {
 
     int dimension;
-    struct __attribute__ ((__packed__, __aligned__(8))) spoint centroid;
+    float x, y;
 };
 
 typedef struct cluster *Cluster;

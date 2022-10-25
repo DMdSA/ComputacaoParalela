@@ -3,7 +3,7 @@ BIN = bin/
 SRC = src/
 INCLUDES = include/
 EXEC = k_means
-CFLAGS = -g -O2 -ffast-math -ftree-vectorize -march=native
+CFLAGS = -g -O2 -ffast-math -ftree-vectorize -msse4 -march=native
 .DEFAULT_GOAL = k_means
 
 k_means: $(SRC)k_means.c $(BIN)point.o $(BIN)cluster.o

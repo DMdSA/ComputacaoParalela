@@ -5,8 +5,8 @@
 
 void print_cluster(struct cluster c) {
 
-    printf("Cluster:{.dimension=%d, .centroid={.x=%.5lf, .y=%.5f, .k=%d}}",
-                        c.dimension, (c.centroid).x, (c.centroid).y, (c.centroid).k);
+    printf("Cluster:{.dimension=%d, .centroid={.x=%.3lf, .y=%.3f}",
+                        c.dimension, c.x, c.y);
 }
 
 

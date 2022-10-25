@@ -21,11 +21,7 @@ float MEANS_ARRAY[K*2];
 
 float euclidian_distance(float x1, float y1, float x2, float y2) {
 
-    float x = x2-x1;
-    x *= x;
-    float y = y2-y1;
-    y *= y;
-    return sqrt(x+y);
+    return sqrt((x2-x1) * (x2-x1) + (y2-y1) * (y2-y1));
 }
 
 /**
@@ -55,13 +51,13 @@ void inicializa(int n_points, int n_clusters) {
     // random sample generator
     for (i = 0; i < N; i++) {
 
-        RANDOM_SAMPLE[i] = (struct spoint) {.x = (float) rand()/RAND_MAX, .y = (float) rand()/RAND_MAX, .k = -1};
+        RANDOM_SAMPLE[i] = (struct spoint) {.x = (float) rand()*(1.0f/RAND_MAX), .y = (float) rand()*(1.0f/RAND_MAX), .k = -1};
     }
 
     // initialize each of K clusters and assign their first centroid
     for (i = 0; i < K; i++) {
 
-        CLUSTERS[i] = (struct cluster) {.dimension = 0, .centroid = {.x = RANDOM_SAMPLE[i].x, .y = RANDOM_SAMPLE[i].y, i}};
+        CLUSTERS[i] = (struct cluster) {.dimension = 0, .x = RANDOM_SAMPLE[i].x, .y = RANDOM_SAMPLE[i].y};
     }
 }
  
@@ -74,16 +70,17 @@ void inicializa(int n_points, int n_clusters) {
 int update_samples() {
 
     // auxiliar variables
-    float minDist = FLT_MAX, dist = 0.0f;
+    float minDist = FLT_MAX, dist = 0.0f, x=0.0f, y=0.0f;
     int minK = INT_MAX, changes_flag = 0;
-    struct spoint p,c1,c2;
+    struct spoint p = {0}, c= {0};
 
 
     // for each of the samples
+    #pragma omp simd
     for (i = 0; i < N; i++) {
 
         // get current point
-        p = RANDOM_SAMPLE[i];
+        p = *(RANDOM_SAMPLE+i);
         
         // default values for minimum calculation
         
@@ -92,12 +89,11 @@ int update_samples() {
 
         // for each of the *other* clusters
         for (j = 0; j < K; j++) {
-            
-            c1 = (CLUSTERS[j]).centroid;
+
             
             // calculate the euclidian distance
             //dist = euclidianDistance(p, (CLUSTERS[j]).centroid);
-            dist = euclidian_distance(p.x, p.y, c1.x, c1.y);
+            dist = euclidian_distance(p.x, p.y, CLUSTERS[j].x, CLUSTERS[j].y);
             
             // if a new minimum is found
             if (dist < minDist) {
@@ -140,7 +136,7 @@ void update_centroids() {
 
     // initialize means array
     int index = 0, dimension = 0;
-    for (i = 0; i < K*2; i++) {
+    for (i = 0; i < means_size; i++) {
         MEANS_ARRAY[i] = 0.0f;
     }
 
@@ -168,9 +164,8 @@ void update_centroids() {
 
         // mean calculation
         //printf("\n#> dimension %d, index %d, %.5f, %.5f", dimension, index, (CLUSTERS[i].centroid).x, (CLUSTERS[i].centroid).y);
-        (CLUSTERS[i].centroid).x = MEANS_ARRAY[index] / (float)dimension; 
-        (CLUSTERS[i].centroid).y = MEANS_ARRAY[index + 1] / (float)dimension;
-
+        (CLUSTERS[i].x) = MEANS_ARRAY[index] * 1.0f/(float)dimension; 
+        (CLUSTERS[i].y) = MEANS_ARRAY[index + 1] * 1.0f/(float)dimension;
 
     }
 
