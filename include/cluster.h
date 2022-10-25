@@ -4,15 +4,14 @@
 #include "point.h"
 extern const int CSIZE;
 
-struct __attribute__ ((__packed__, __aligned__(8))) cluster {
+struct cluster {
 
-    int dimension;
     float x, y;
+    int dimension;
 };
 
 typedef struct cluster *Cluster;
 
-int cluster_tostring(struct cluster c, char* s);
 void print_cluster(struct cluster c);
 
 #endif

@@ -1,28 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
-#include <limits.h>
 
 #include "../include/point.h"
 #include "../include/cluster.h"
 
 #include <time.h>
 #include <math.h>
-#include <malloc.h>
 
 #define N 10000000
 #define K 4
 
 
 struct spoint* RANDOM_SAMPLE;
-struct cluster* CLUSTERS; 
-int i = 0, j = 0, means_size = K*2;
-float MEANS_ARRAY[K*2];
+struct cluster* CLUSTERS;
+float CENTR_MEANS[K*2];
 
+/*
 float euclidian_distance(float x1, float y1, float x2, float y2) {
 
     return sqrt((x2-x1) * (x2-x1) + (y2-y1) * (y2-y1));
 }
+*/
 
 /**
  * @brief inicializa N amostras, no espaço, com valores random, e inicializa K clusters com random centroids
@@ -30,143 +29,106 @@ float euclidian_distance(float x1, float y1, float x2, float y2) {
  * @param n_points número de amostras a utilizar
  * @param n_clusters número de clusters
  */
-void inicializa(int n_points, int n_clusters) {
+void inicializa(const int n_points, const int n_clusters) {
 
-    // malloc for vector of size N
-    RANDOM_SAMPLE = (struct spoint*) malloc(sizeof(struct spoint) * N);
-
-    // malloc for N clusters
-    CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * K);
-
+    // malloc for K clusters
+    CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
     
+    // malloc for vector of size N
+    RANDOM_SAMPLE = (struct spoint*) malloc(sizeof(struct spoint) * n_points);
+
     // if malloc fails
     if (!RANDOM_SAMPLE || !CLUSTERS) {
         fprintf(stderr, "Fatal: failed to allocate bytes.\n");
         exit(1);
     }
 
+    int i = 0;
     // rand seed
     srand(10);
-
     // random sample generator
-    for (i = 0; i < N; i++) {
-
-        RANDOM_SAMPLE[i] = (struct spoint) {.x = (float) rand()*(1.0f/RAND_MAX), .y = (float) rand()*(1.0f/RAND_MAX), .k = -1};
-    }
+    
+    do {
+        RANDOM_SAMPLE[i] = (struct spoint) {.x = (float)rand()/RAND_MAX, .y = (float)rand()/RAND_MAX, .dist = FLT_MAX, .k = -1};
+        i++;
+    } while (i < n_points);
 
     // initialize each of K clusters and assign their first centroid
-    for (i = 0; i < K; i++) {
-
-        CLUSTERS[i] = (struct cluster) {.dimension = 0, .x = RANDOM_SAMPLE[i].x, .y = RANDOM_SAMPLE[i].y};
-    }
+    i = 0;
+    do {
+        CLUSTERS[i] = (struct cluster) {.x = RANDOM_SAMPLE[i].x, .y = RANDOM_SAMPLE[i].y, .dimension = 0};
+        i++;
+    } while (i < n_clusters);
 }
  
 
-/**
- * @brief goes through all samples and updates their cluster
- * 
- * @return int 0 if there was no changes were made
- */
-int update_samples() {
+int update_samples(const int samples, const int klusters) {
 
-    // auxiliar variables
-    float minDist = FLT_MAX, dist = 0.0f, x=0.0f, y=0.0f;
-    int minK = INT_MAX, changes_flag = 0;
-    struct spoint p = {0}, c= {0};
+    struct spoint* restrict sp = NULL;
+    struct cluster* restrict c = NULL;
+    float dist = 0.0f, sqred = 0.0f, minDist = FLT_MAX;
+    int lastK = 0, minK = 0, changes = 0;
 
+    for (int p = 0; p < samples; p++) {
 
-    // for each of the samples
-    #pragma omp simd
-    for (i = 0; i < N; i++) {
+        sp = &(RANDOM_SAMPLE[p]);
+        lastK = sp->k;
+        minK = lastK;
+        minDist = FLT_MAX;
 
-        // get current point
-        p = *(RANDOM_SAMPLE+i);
-        
-        // default values for minimum calculation
-        
-        minDist = INT_MAX;
-        minK = p.k;
+        for (int k = 0; k < klusters; k++) {
 
-        // for each of the *other* clusters
-        for (j = 0; j < K; j++) {
+            c = &(CLUSTERS[k]);
+            sqred = (sp->x - c->x) * (sp->x - c->x) + (sp->y - c->y) * (sp->y - c->y);
+            dist = sqrtf(sqred);
 
-            
-            // calculate the euclidian distance
-            //dist = euclidianDistance(p, (CLUSTERS[j]).centroid);
-            dist = euclidian_distance(p.x, p.y, CLUSTERS[j].x, CLUSTERS[j].y);
-            
-            // if a new minimum is found
             if (dist < minDist) {
-
-                // update the minimum distance and it's associated cluster
+                
                 minDist = dist;
-                minK = j;
+                //sp->k = k;
+                minK = k;
             }
-            
         }
 
-        if (minK != (p.k)) {
-            
-            // assuming k will always be >= 0
-            // update previous cluster
-            if (p.k != -1)
-                (CLUSTERS[p.k]).dimension--;
-
-            // update newer cluster
-            (CLUSTERS[minK]).dimension++;
-
-            // update point's cluster
-            (RANDOM_SAMPLE[i]).k = minK;
-            changes_flag = 1;
+        if (minK != lastK) {
+            if (lastK != -1) ((CLUSTERS[lastK]).dimension)--;
+            (CLUSTERS[minK].dimension)++;
+            sp->dist = minDist;
+            sp->k = minK;
+            if (!changes) changes = 1;
         }
-        
     }
-
-    return changes_flag;
+    return changes;
 }
 
 
 
-void update_centroids() {
+void update_centroids(const int samples, const int klusters) {
 
-    /*
-        k = 4, #tam = 20 bytes (cada ponto), chacheL1 = 64bytes     => 3.2
-        k = 4, #tam = 16 (cada ponto), cacheL1 = 64                 => 4
-    */
+    const int arraysize = klusters * 2;
+    for (int i = 0; i < arraysize; i++) {
 
-    // initialize means array
+        *(CENTR_MEANS+i) = 0.0f;
+    }
+
     int index = 0, dimension = 0;
-    for (i = 0; i < means_size; i++) {
-        MEANS_ARRAY[i] = 0.0f;
-    }
+    struct spoint p = RANDOM_SAMPLE[0];
 
-    struct spoint p;
+    #pragma omp simd
+    for(int i = 0; i < samples; i++) {
 
-    // for each of the samples
-    for (i = 0; i < N; i++) {
-
-        p=RANDOM_SAMPLE[i];
+        p = *(RANDOM_SAMPLE+i);
         index = p.k * 2;
-        MEANS_ARRAY[index] += p.x;
-        MEANS_ARRAY[index+1] += p.y;
-
-        // k = 0, 0 1
-        // k = 1, 2 3
-        // k = 2, 4 5
+        CENTR_MEANS[index++] += p.x;
+        CENTR_MEANS[index] += p.y;
     }
 
-    // for each cluster, calculate the new centroid
-    for (i = 0; i < K; i++) {
-        
-        // aux variables
-        index = i*2;
-        dimension = (CLUSTERS[i]).dimension;
+    for (int i = 0; i < klusters; i++) {
 
-        // mean calculation
-        //printf("\n#> dimension %d, index %d, %.5f, %.5f", dimension, index, (CLUSTERS[i].centroid).x, (CLUSTERS[i].centroid).y);
-        (CLUSTERS[i].x) = MEANS_ARRAY[index] * 1.0f/(float)dimension; 
-        (CLUSTERS[i].y) = MEANS_ARRAY[index + 1] * 1.0f/(float)dimension;
-
+        index = i+i;
+        dimension = CLUSTERS[i].dimension;
+        (CLUSTERS[i]).x = CENTR_MEANS[index++] / (float)dimension;
+        (CLUSTERS[i]).y = CENTR_MEANS[index] / (float)dimension;
     }
 
 }
@@ -186,19 +148,19 @@ int main() {
 
     // initialize random samples + clusters
     int end_flag = 1, n_loops = 0;
+    const int n=N, k=K;
     clock_t begin = clock();
-    inicializa(N, K);
+    inicializa(n, k);
 
     do {
-        end_flag = update_samples();
+        end_flag = update_samples(n,k);
         
         if (end_flag) {
             
             n_loops++;
-            update_centroids();
-            
+            update_centroids(n,k);    
         }
-
+    
     } while (end_flag);
     
     
@@ -208,13 +170,13 @@ int main() {
     
     printf("\n#> n_loops: %d\n", n_loops);
     for (int i = 0; i < K; i++) {
-
+    
         print_cluster(CLUSTERS[i]);
         printf("\n");
     }
 
-    free(RANDOM_SAMPLE);
     free(CLUSTERS);
+    free(RANDOM_SAMPLE);
     printf("\n#> done!\n\n");
     
     return 0;
