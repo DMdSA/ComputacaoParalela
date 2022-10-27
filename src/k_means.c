@@ -119,8 +119,8 @@ void update_centroids(const int samples, const int klusters) {
 
         p = *(RANDOM_SAMPLE+i);
         index = p.k * 2;
-        CENTR_MEANS[index++] += p.x;
-        CENTR_MEANS[index] += p.y;
+        CENTR_MEANS[index] += p.x;
+        CENTR_MEANS[index+1] += p.y;
     }
 
     for (int i = 0; i < klusters; i++) {
