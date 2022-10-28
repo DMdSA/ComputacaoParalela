@@ -6,5 +6,5 @@
 
 void print_spoint(struct spoint a) {
 
-    printf("Point:{x:%.3f, y:%.3f,\tK=%d, dist=%.3f};", a.x, a.y, a.k, a.dist);
+    printf("Point:{x:%.3f, y:%.3f,\tK=%d};", a.x, a.y, a.k);
 }

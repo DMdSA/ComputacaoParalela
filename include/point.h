@@ -4,7 +4,7 @@
 struct spoint {
     // struct of a space point
 
-    float x, y, dist;   // x, y and distance to it's cluster
+    float x, y;          // x, y and distance to it's cluster
     int k;              // cluster
 } ; 
 typedef struct spoint *SPoint;

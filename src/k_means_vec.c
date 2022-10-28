@@ -10,7 +10,7 @@
 #define N 10000000
 #define K 4
 
-float* RANDOM_SAMPLES __attribute__((aligned (32))), *CLUSTERS __attribute__((aligned (32)));;
+float* RANDOM_SAMPLES, *CLUSTERS;
 
 float MEANS_ARRAY[K*2];
 
@@ -40,6 +40,7 @@ void inicializa(int n_points, int n_clusters) {
     srand(10);
 
     // random sample generator
+    
     for (int i = 0; i < n_points;) {
 
         RANDOM_SAMPLES[i++] = (float) rand()/RAND_MAX;          // point's X
@@ -142,7 +143,6 @@ void update_centroids(const int n_points, const int n_clusters) {
         dimension = CLUSTERS[i+2];
 
         // mean calculation
-        //printf("\n#> dimension %d, index %d, %.5f, %.5f", dimension, index, (CLUSTERS[i].centroid).x, (CLUSTERS[i].centroid).y);
         (CLUSTERS[i]) = MEANS_ARRAY[index] /dimension; 
         (CLUSTERS[i+1]) = MEANS_ARRAY[index + 1] /dimension;
         auxIndex++;
@@ -167,8 +167,6 @@ int main() {
     int end_flag = 1, n_loops = 0;
     const int new_n = N*3, new_k = K*3;
     
-    clock_t begin = clock();
-
     inicializa(new_n, new_k);
     do {
         end_flag = update_samples(new_n, new_k);
@@ -181,10 +179,6 @@ int main() {
         }
 
     } while (end_flag);
-    
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    printf("\n#> time:%.5f\n", time_spent);
     
     printf("\n#> n_loops: %d\n", n_loops);
     for (int i = 0; i < new_k; i+=3) {

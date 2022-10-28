@@ -44,19 +44,23 @@ void inicializa(const int n_points, const int n_clusters) {
     }
 
     int i = 0;
+    float x = 0.0f, y = 0.0f;
     // rand seed
     srand(10);
     // random sample generator
     
     do {
-        RANDOM_SAMPLE[i] = (struct spoint) {.x = (float)rand()/RAND_MAX, .y = (float)rand()/RAND_MAX, .dist = FLT_MAX, .k = -1};
-        i++;
+        x = (float) rand()/RAND_MAX;
+        y = (float) rand()/RAND_MAX;
+        RANDOM_SAMPLE[i++] = (struct spoint) {.x = x, .y = y, .k = -1};
     } while (i < n_points);
 
     // initialize each of K clusters and assign their first centroid
     i = 0;
     do {
-        CLUSTERS[i] = (struct cluster) {.x = RANDOM_SAMPLE[i].x, .y = RANDOM_SAMPLE[i].y, .dimension = 0};
+        x = RANDOM_SAMPLE[i].x;
+        y = RANDOM_SAMPLE[i].y;
+        CLUSTERS[i] = (struct cluster) {.x =x, .y = y, .dimension = 0};
         i++;
     } while (i < n_clusters);
 }
@@ -64,28 +68,27 @@ void inicializa(const int n_points, const int n_clusters) {
 
 int update_samples(const int samples, const int klusters) {
 
-    struct spoint* restrict sp = NULL;
+    struct spoint sp = {0};
     struct cluster* restrict c = NULL;
-    float dist = 0.0f, sqred = 0.0f, minDist = FLT_MAX;
+    float dist = 0.0f, minDist = FLT_MAX;
     int lastK = 0, minK = 0, changes = 0;
+
+    float x = 0.0f, y = 0.0f;
 
     for (int p = 0; p < samples; p++) {
 
-        sp = &(RANDOM_SAMPLE[p]);
-        lastK = sp->k;
-        minK = lastK;
+        sp = RANDOM_SAMPLE[p];
+        x = sp.x; y = sp.y;
+        minK = lastK = sp.k;
         minDist = FLT_MAX;
-
+        
         for (int k = 0; k < klusters; k++) {
 
             c = &(CLUSTERS[k]);
-            sqred = (sp->x - c->x) * (sp->x - c->x) + (sp->y - c->y) * (sp->y - c->y);
-            dist = sqrtf(sqred);
-
+            dist = sqrtf((x - c->x) * (x - c->x) + (y - c->y) * (y - c->y));
             if (dist < minDist) {
                 
                 minDist = dist;
-                //sp->k = k;
                 minK = k;
             }
         }
@@ -93,8 +96,7 @@ int update_samples(const int samples, const int klusters) {
         if (minK != lastK) {
             if (lastK != -1) ((CLUSTERS[lastK]).dimension)--;
             (CLUSTERS[minK].dimension)++;
-            sp->dist = minDist;
-            sp->k = minK;
+            RANDOM_SAMPLE[p].k = minK;
             if (!changes) changes = 1;
         }
     }
@@ -114,7 +116,6 @@ void update_centroids(const int samples, const int klusters) {
     int index = 0, dimension = 0;
     struct spoint p = RANDOM_SAMPLE[0];
 
-    #pragma omp simd
     for(int i = 0; i < samples; i++) {
 
         p = *(RANDOM_SAMPLE+i);
@@ -145,11 +146,21 @@ int main() {
     //char cluster_string[CSIZE];
     
 
+    //struct spoint ex[2] = {0};
+    //ex[0] = (struct spoint) {.x = 1.0f, .y = 0.0f, .k = 1};
+    //ex[1] = (struct spoint) {.x = 4.0f, .y = 2.0f, .k = 3};
+//
+    //printf("\n#> [0]: x:%p, y:%p, k:%p", &ex[0].x, &ex[0].y, &ex[0].k);
+    //printf("\n#> [1]: x:%p, y:%p, k:%p", &ex[1].x, &ex[1].y, &ex[1].k);
+    //float exx[6] = {0};
+    //exx[0] = 1.0f;exx[1] = 1.0f;exx[2] = 1.0f;exx[3] = 1.0f;exx[4] = 1.0f;exx[5] = 1.0f;
+//
+    //printf("\n#> struct size: %ld, float size: %ld", sizeof(ex), sizeof(exx));
 
     // initialize random samples + clusters
     int end_flag = 1, n_loops = 0;
     const int n=N, k=K;
-    clock_t begin = clock();
+    //clock_t begin = clock();
     inicializa(n, k);
 
     do {
@@ -164,20 +175,20 @@ int main() {
     } while (end_flag);
     
     
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    printf("\n#> time:%.5f\n", time_spent);
+    //clock_t end = clock();
+    //double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    //printf("\n#> time:%.5f\n", time_spent);
     
     printf("\n#> n_loops: %d\n", n_loops);
     for (int i = 0; i < K; i++) {
     
-        print_cluster(CLUSTERS[i]);
-        printf("\n");
+       printf("\n#> Center: (%.3f, %.3f), Size: %d", CLUSTERS[i].x, CLUSTERS[i].y, CLUSTERS[i].dimension);
     }
-
+    fflush(stdout);
     free(CLUSTERS);
     free(RANDOM_SAMPLE);
     printf("\n#> done!\n\n");
     
     return 0;
 }
+
