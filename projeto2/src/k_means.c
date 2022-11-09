@@ -76,6 +76,11 @@ void populate(int n_points, int n_clusters) {
  */
 void populate_thread(int n_points, int n_clusters) {
 
+    /**
+     * - acho que o populate fica horrivel com threads (?)
+     *  - porque?: teoria, perf, assembly, comparar search, cache misses, etc...
+     */
+
     // default rand seed
     srand(10);
 
