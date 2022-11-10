@@ -32,9 +32,19 @@ struct cluster* CLUSTERS;
  */
 int initialize(const int n_points, const int n_clusters) {
 
-    CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
-    RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
-
+    #pragma omp parallel sections 
+    {
+    
+        #pragma omp section 
+        {
+            CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
+        }
+        #pragma omp section 
+        {
+            RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
+        }
+    }
+    
     if (!RANDOM_SAMPLE || !CLUSTERS) {
         fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes.\n");
         exit(2);
@@ -52,8 +62,9 @@ void populate(int n_points, int n_clusters) {
 
     // default rand seed
     srand(10);
-
+    
     // random points
+    #pragma omp for schedule(static)
     for (int i = 0; i < n_points; i++) {
         
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
@@ -61,6 +72,7 @@ void populate(int n_points, int n_clusters) {
     }
 
     // clusters
+    #pragma omp for schedule(static)
     for (int i = 0; i < n_clusters; i++) {
 
         float x = (RANDOM_SAMPLE[i]).x, y = (RANDOM_SAMPLE[i]).y;
@@ -84,7 +96,6 @@ void populate_thread(int n_points, int n_clusters) {
     // default rand seed
     srand(10);
 
-    #pragma omp parallel num_threads(2)
     #pragma omp for
     // random points
     for (int i = 0; i < n_points; i++) {
@@ -101,6 +112,7 @@ void populate_thread(int n_points, int n_clusters) {
         CLUSTERS[i] = (struct cluster) {.x = x, .y = y, .dimension = 0};
     }
 }
+
 
 float euclidian_distance(struct point point, struct cluster cluster) {
 
@@ -132,6 +144,80 @@ float euclidian_distance_conditional(struct point point, struct cluster cluster)
     float x = x2-x1;
     return (x >= 0) ? x : -x;
 }
+
+
+void updateSamples(int samples, int klusters, float* centroid_mean_array) {
+
+    float min_dist = 0.0f;
+    int min_index = 0;
+
+    #pragma omp default(shared) private(min_dist, min_index) firstprivate(samples, klusters)
+    {
+
+        #pragma omp for schedule (static)
+
+            for (int i = 0; i < samples; i++) {
+
+                struct point point = RANDOM_SAMPLE[i];
+                min_dist = euclidian_distance(point, CLUSTERS[0]);
+                min_index = 0;
+
+                for (int j = 1; j < klusters; j++) {
+
+                    struct cluster cluster = CLUSTERS[j];
+
+                    float dist = euclidian_distance(point, cluster);
+
+                    if (dist < min_dist) {
+
+                        min_dist = dist;
+                        min_index = j;
+                    }
+                }
+
+                //point.k = min_index;
+                CLUSTERS[min_index].dimension++;
+
+                centroid_mean_array[min_index*2] += point.x;
+                centroid_mean_array[min_index*2+1] += point.y; 
+            }
+    }
+}
+
+
+int update_cluster(struct cluster* cluster, int cluster_index, float* centroid_mean_array) {
+
+    float x = (*cluster).x, y = (*cluster).y;
+    int index = cluster_index*2;
+
+    (*cluster).x = centroid_mean_array[index] / (float)(*cluster).dimension;
+    (*cluster).y = centroid_mean_array[index+1] / (float)(*cluster).dimension;
+
+    // clear the auxiliar values
+    centroid_mean_array[index] = 0.0f;
+    centroid_mean_array[index+1] = 0.0f;
+
+    // clear cluster dimension for next iteration
+    //(*cluster).dimension = 0;
+
+    if (cluster->x == x && cluster->y == y) return 0;
+    return 1;
+}
+
+int update_clusters(int samples, int klusters, float* centroid_mean_array) {
+
+    int flag = 0;
+
+    for (int i = 0; i < klusters; i++) {
+        
+        flag += update_cluster(&CLUSTERS[i], i, centroid_mean_array);
+        
+    }
+
+    return flag;
+}
+
+
 
 int update_samples(const int samples, const int klusters, const int n_threads) {
 
@@ -246,8 +332,6 @@ int main(int argc, char* argv[]) {
     sscanf(argv[2], "%d", &n_clusters);
     sscanf(argv[3], "%d", &n_threads);
 
-    float CENTR_MEANS[n_clusters * 2];
-
     if (n_clusters > n_points) {
 
         // k_means 1 1 and 2 2 are aborted...?
@@ -256,27 +340,30 @@ int main(int argc, char* argv[]) {
         exit(3);
     }
     
+    int centr_means_size = n_clusters + n_clusters;
+    float CENTR_MEANS[centr_means_size];
+    for (int i = 0; i < centr_means_size; CENTR_MEANS[i]=0.0f, i++);
 
     int end_flag = 1, n_loops = 0;
+    float begin = omp_get_wtime();
 
-    clock_t begin = clock();
     #pragma omp parallel num_threads(n_threads)
+    
+
     initialize(n_points, n_clusters);
     populate(n_points, n_clusters);
 
     
-    for (end_flag = 1; end_flag; ) {
+    for (end_flag = 1; end_flag; n_loops++) {
 
-        end_flag = update_samples(n_points, n_clusters, n_threads);
-        
-        if (end_flag) {
-            
-            n_loops++;
-            update_centroids(CENTR_MEANS, n_points, n_clusters, n_threads);    
-        }
+        for (int i = 0; i < n_clusters; CLUSTERS[i].dimension = 0, i++);
+        updateSamples(n_points, n_clusters, CENTR_MEANS);
+        end_flag = update_clusters(n_points, n_clusters, CENTR_MEANS);
     }
-    clock_t end = clock();
-    double time_spent = (double) (end-begin) / CLOCKS_PER_SEC;
+    --n_loops;
+    
+    float end = omp_get_wtime();
+    float time_spent = (end-begin);
     printf("\n#> exec: %lf\n\n", time_spent);
     
     printf("N = %d, K = %d, T = %d", n_points, n_clusters, n_threads);
