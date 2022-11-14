@@ -123,6 +123,10 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
     int j = 0;
 
     #pragma omp parallel
+    /*
+        even tho i will be private, the same is not guaranteed for variable j in the inner loop
+        the parallel for only aplies to the outer loop over i, so j is shared by default
+    */
     #pragma omp private(min_dist, min_index, j) firstprivate(samples, klusters)
     {
         #pragma omp for private(j, min_dist, min_index) firstprivate(samples, klusters)
