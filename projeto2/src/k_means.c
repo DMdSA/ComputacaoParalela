@@ -22,7 +22,6 @@ struct point* RANDOM_SAMPLE;
  */
 struct cluster* CLUSTERS;
 
-
 /**
  * @brief initialize points and clusters' arrays with necessary memory
  * 
@@ -32,7 +31,7 @@ struct cluster* CLUSTERS;
  */
 int initialize(int n_points, int n_clusters, int n_threads) {
 
-    #pragma omp parallel sections num_threads(n_threads) 
+    #pragma omp parallel sections
     
     {
     
@@ -72,8 +71,9 @@ void populate(int n_points, int n_clusters) {
         RANDOM_SAMPLE[i] = (struct point) {.x = x, .y = y, .k = -1};
     }
 
+
     // clusters
-    #pragma omp for schedule(static)
+    // not a critical section
     for (int i = 0; i < n_clusters; i++) {
 
         float x = (RANDOM_SAMPLE[i]).x, y = (RANDOM_SAMPLE[i]).y;
@@ -120,9 +120,9 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
     float min_dist = 0.0f;
     int min_index = 0;
 
-    #pragma omp default(shared) private(min_dist, min_index) firstprivate(samples, klusters)
+    #pragma omp parallel
+    #pragma omp private(min_dist, min_index) firstprivate(samples, klusters)
     {
-
         #pragma omp for schedule (static)
 
             for (int i = 0; i < samples; i++) {
@@ -130,9 +130,10 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
                 struct point point = RANDOM_SAMPLE[i];
                 min_dist = euclidian_distance(point, CLUSTERS[0]);
                 min_index = 0;
-
+                
                 for (int j = 1; j < klusters; j++) {
-
+                    
+                    int id = omp_get_thread_num();
                     struct cluster cluster = CLUSTERS[j];
 
                     float dist = euclidian_distance(point, cluster);
@@ -156,9 +157,9 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
 
 int update_cluster(struct cluster* cluster, int cluster_index, float* centroid_mean_array) {
 
-    float x = (*cluster).x, y = (*cluster).y;
     int index = cluster_index*2;
 
+    float x = (*cluster).x, y = (*cluster).y;
     (*cluster).x = centroid_mean_array[index] / (float)(*cluster).dimension;
     (*cluster).y = centroid_mean_array[index+1] / (float)(*cluster).dimension;
 
@@ -176,15 +177,15 @@ int update_cluster(struct cluster* cluster, int cluster_index, float* centroid_m
 int update_clusters(int samples, int klusters, int n_threads, float* centroid_mean_array) {
 
     int flag = 0;
-
-    #pragma omp parallel for simd num_threads(n_threads) private(klusters) reduction(+:flag) schedule(static)
+    
+    #pragma omp parallel
+    #pragma omp for reduction(+:flag)
+    
     for (int i = 0; i < klusters; i++) {
         
-        flag += update_cluster(&CLUSTERS[i], i, centroid_mean_array);
-        int id = omp_get_thread_num();
-        printf("T%d:i%d\n", id, i);
+        flag += update_cluster(&CLUSTERS[i], i, centroid_mean_array);   
     }
-    printf("\n\n");
+
     return flag;
 }
 
@@ -230,10 +231,16 @@ int main(int argc, char* argv[]) {
     int centr_means_size = n_clusters + n_clusters;
     float CENTR_MEANS[centr_means_size];
     
-    #pragma omp parallel num_threads(n_threads)
+    omp_set_num_threads(n_threads);
     
+
+    #pragma omp parallel
     #pragma omp for
-    for (int i = 0; i < centr_means_size; i++) CENTR_MEANS[i]=0.0f;
+    for (int i = 0; i < centr_means_size; i++) {
+        CENTR_MEANS[i]=0.0f;
+        
+    }
+        
 
     int end_flag = 1, n_loops = 0;
     float begin = omp_get_wtime();
@@ -241,10 +248,21 @@ int main(int argc, char* argv[]) {
     initialize(n_points, n_clusters, n_threads);
     populate(n_points, n_clusters);
 
-    
+
     for (end_flag = 1; (end_flag && n_loops <= 20); n_loops++) {
 
-        for (int i = 0; i < n_clusters; CLUSTERS[i].dimension = 0, i++);
+        #pragma omp parallel for
+        for (int i = 0; i < n_clusters; i++) {
+
+            CLUSTERS[i].dimension = 0;
+            //printf("\n#> using %d threads\n", omp_get_num_threads());
+            /*
+            int id = omp_get_thread_num();
+            printf("T%d:i%d\n", id, i);
+            */
+            
+        }
+        
         updateSamples(n_points, n_clusters, CENTR_MEANS);
         end_flag = update_clusters(n_points, n_clusters, n_threads, CENTR_MEANS);
     }
