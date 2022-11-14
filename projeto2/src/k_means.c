@@ -354,7 +354,7 @@ int main(int argc, char* argv[]) {
     populate(n_points, n_clusters);
 
     
-    for (end_flag = 1; end_flag; n_loops++) {
+    for (end_flag = 1; (end_flag && n_loops <= 20); n_loops++) {
 
         for (int i = 0; i < n_clusters; CLUSTERS[i].dimension = 0, i++);
         updateSamples(n_points, n_clusters, CENTR_MEANS);
