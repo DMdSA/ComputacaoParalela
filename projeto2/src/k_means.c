@@ -64,7 +64,8 @@ void populate(int n_points, int n_clusters) {
     srand(10);
     
     // random points
-    #pragma omp for schedule(static)
+    //#pragma omp for schedule(static)
+    // not a critical section
     for (int i = 0; i < n_points; i++) {
         
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
@@ -119,11 +120,12 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
 
     float min_dist = 0.0f;
     int min_index = 0;
+    int j = 0;
 
     #pragma omp parallel
-    #pragma omp private(min_dist, min_index) firstprivate(samples, klusters)
+    #pragma omp private(min_dist, min_index, j) firstprivate(samples, klusters)
     {
-        #pragma omp for schedule (static)
+        #pragma omp for private(j, min_dist, min_index) firstprivate(samples, klusters)
 
             for (int i = 0; i < samples; i++) {
 
