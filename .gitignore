@@ -3,3 +3,4 @@ projeto2/perf
 *.data
 *.o
 *.old
+projeto2/bin/k_means
