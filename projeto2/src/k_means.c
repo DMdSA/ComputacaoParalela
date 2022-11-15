@@ -31,19 +31,9 @@ struct cluster* CLUSTERS;
  */
 int initialize(int n_points, int n_clusters, int n_threads) {
 
-    #pragma omp parallel sections
-    
-    {
-    
-        #pragma omp section 
-        {
-            CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
-        }
-        #pragma omp section 
-        {
-            RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
-        }
-    }
+        // não se justifica, quando houver >2 threads, ter aqui sections...
+        CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
+        RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
     
     if (!RANDOM_SAMPLE || !CLUSTERS) {
         fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes.\n");
@@ -60,36 +50,50 @@ int initialize(int n_points, int n_clusters, int n_threads) {
  */
 void populate(int n_points, int n_clusters) {
 
-    // default rand seed
+   // default rand seed
     srand(10);
     
     // random points
     //#pragma omp for schedule(static)
     // not a critical section
-    for (int i = 0; i < n_points; i++) {
-        
+    int i = 0;
+    for (i = 0; i < n_clusters; i++) {
+
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
         RANDOM_SAMPLE[i] = (struct point) {.x = x, .y = y, .k = -1};
-    }
-
-
-    // clusters
-    // not a critical section
-    for (int i = 0; i < n_clusters; i++) {
-
-        float x = (RANDOM_SAMPLE[i]).x, y = (RANDOM_SAMPLE[i]).y;
         CLUSTERS[i] = (struct cluster) {.x = x, .y = y, .dimension = 0};
+    }
+    
+    // devia ser boa ideia, até para vetorizar...
+    //#pragma omp parallel
+    //#pragma omp simd
+    for (int j = i; j < n_points; j++) {
+
+        float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
+        RANDOM_SAMPLE[j] = (struct point) {.x = x, .y = y, .k = -1};
     }
 }
 
-
+/**
+ * @brief calculates the euclidian distance between a given point and cluster
+ * 
+ * @param point point struct
+ * @param cluster cluster struct
+ * @return float distance
+ */
 float euclidian_distance(struct point point, struct cluster cluster) {
 
     float x = point.x-cluster.x, y = point.y-cluster.y;
     return (sqrtf(x*x + y*y));
 }
 
-
+/**
+ * @brief goes through all random samples and calculates their new associated cluster
+ * 
+ * @param samples random samples array
+ * @param klusters clusters array
+ * @param centroid_mean_array auxiliar array for further calculation of clusters' new centroids
+ */
 void updateSamples(int samples, int klusters, float* centroid_mean_array) {
 
     float min_dist = 0.0f;
@@ -101,7 +105,7 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
         even tho 'i' will be private, the same is not guaranteed for variable 'j' in the inner loop
         the parallel for only aplies to the outer loop over 'i', so 'j' is shared by default
     */
-        #pragma omp for private(j, min_dist, min_index) firstprivate(samples, klusters) schedule(static, samples/klusters)
+        #pragma omp for private(j, min_dist, min_index) firstprivate(samples, klusters) schedule(static, 100)
 
             for (int i = 0; i < samples; i++) {
 
@@ -109,11 +113,10 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
                 min_dist = euclidian_distance(point, CLUSTERS[0]);
                 min_index = 0;
                 
+                //#pragma omp simd
                 for (j = 1; j < klusters; j++) {
                     
-                    struct cluster cluster = CLUSTERS[j];
-
-                    float dist = euclidian_distance(point, cluster);
+                    float dist = euclidian_distance(point, CLUSTERS[j]);
 
                     if (dist < min_dist) {
 
@@ -123,11 +126,17 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
                 }
 
                 //point.k = min_index;
+                
+                
                 RANDOM_SAMPLE[i].k = min_index;
-                CLUSTERS[min_index].dimension++;
 
+                #pragma omp atomic
+                CLUSTERS[min_index].dimension++;
+                #pragma omp atomic
                 centroid_mean_array[min_index*2] += point.x;
+                #pragma omp atomic
                 centroid_mean_array[min_index*2+1] += point.y; 
+                
             }
 }
 
@@ -155,9 +164,9 @@ int update_clusters(int samples, int klusters, int n_threads, float* centroid_me
 
     int flag = 0;
     
+    // simd aqui melhorou, acho
     #pragma omp parallel
-    #pragma omp for reduction(+:flag)
-    
+    #pragma omp for simd reduction(+:flag)
     for (int i = 0; i < klusters; i++) {
         
         flag += update_cluster(&CLUSTERS[i], i, centroid_mean_array);   
@@ -178,14 +187,10 @@ void main_arg_control(int argc, char* argv[]) {
 
     if (argc != 4) {
 
-        printf("\n#> [k_means:error]\n\t%s <number of points> <number of clusters> <number of threads>\n\n"
-        , argv[0]);
-        
+        printf("\n#> [k_means:error]\n\t%s <number of points> <number of clusters> <number of threads>\n\n", argv[0]);
         exit(1);
     }
 }
-
-
 
 int main(int argc, char* argv[]) {
 
@@ -208,15 +213,14 @@ int main(int argc, char* argv[]) {
     int centr_means_size = n_clusters + n_clusters;
     float CENTR_MEANS[centr_means_size];
     
-    omp_set_num_threads(n_threads);
     
+    omp_set_num_threads(n_threads);
 
     // not hot code
     //#pragma omp parallel
     //#pragma omp for
     for (int i = 0; i < centr_means_size; i++) {
         CENTR_MEANS[i]=0.0f;
-        
     }
         
 
@@ -241,6 +245,7 @@ int main(int argc, char* argv[]) {
     }
     --n_loops;
     
+
     float end = omp_get_wtime();
     float time_spent = (end-begin);
     printf("\n#> exec: %lf\n\n", time_spent);
