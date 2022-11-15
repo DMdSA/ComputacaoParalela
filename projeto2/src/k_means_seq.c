@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
 #include <math.h>
 #include <float.h>
 
@@ -31,19 +30,8 @@ struct cluster* CLUSTERS;
  */
 int initialize(int n_points, int n_clusters, int n_threads) {
 
-    #pragma omp parallel sections
-    
-    {
-    
-        #pragma omp section 
-        {
-            CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
-        }
-        #pragma omp section 
-        {
-            RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
-        }
-    }
+    CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
+    RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
     
     if (!RANDOM_SAMPLE || !CLUSTERS) {
         fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes.\n");
@@ -64,8 +52,6 @@ void populate(int n_points, int n_clusters) {
     srand(10);
     
     // random points
-    //#pragma omp for schedule(static)
-    // not a critical section
     for (int i = 0; i < n_points; i++) {
         
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
@@ -74,7 +60,6 @@ void populate(int n_points, int n_clusters) {
 
 
     // clusters
-    // not a critical section
     for (int i = 0; i < n_clusters; i++) {
 
         float x = (RANDOM_SAMPLE[i]).x, y = (RANDOM_SAMPLE[i]).y;
@@ -96,21 +81,15 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
     int min_index = 0;
     int j = 0;
 
-    #pragma omp parallel
-    /*
-        even tho 'i' will be private, the same is not guaranteed for variable 'j' in the inner loop
-        the parallel for only aplies to the outer loop over 'i', so 'j' is shared by default
-    */
-        #pragma omp for private(j, min_dist, min_index) firstprivate(samples, klusters) schedule(static, samples/klusters)
-
             for (int i = 0; i < samples; i++) {
 
                 struct point point = RANDOM_SAMPLE[i];
                 min_dist = euclidian_distance(point, CLUSTERS[0]);
                 min_index = 0;
                 
-                for (j = 1; j < klusters; j++) {
+                for (int j = 1; j < klusters; j++) {
                     
+                    int id = omp_get_thread_num();
                     struct cluster cluster = CLUSTERS[j];
 
                     float dist = euclidian_distance(point, cluster);
@@ -123,19 +102,19 @@ void updateSamples(int samples, int klusters, float* centroid_mean_array) {
                 }
 
                 //point.k = min_index;
-                RANDOM_SAMPLE[i].k = min_index;
                 CLUSTERS[min_index].dimension++;
 
                 centroid_mean_array[min_index*2] += point.x;
                 centroid_mean_array[min_index*2+1] += point.y; 
             }
+    }
 }
 
 
 int update_cluster(struct cluster* cluster, int cluster_index, float* centroid_mean_array) {
 
     int index = cluster_index*2;
-    
+
     float x = (*cluster).x, y = (*cluster).y;
     (*cluster).x = centroid_mean_array[index] / (float)(*cluster).dimension;
     (*cluster).y = centroid_mean_array[index+1] / (float)(*cluster).dimension;
@@ -154,9 +133,6 @@ int update_cluster(struct cluster* cluster, int cluster_index, float* centroid_m
 int update_clusters(int samples, int klusters, int n_threads, float* centroid_mean_array) {
 
     int flag = 0;
-    
-    #pragma omp parallel
-    #pragma omp for reduction(+:flag)
     
     for (int i = 0; i < klusters; i++) {
         
@@ -208,20 +184,12 @@ int main(int argc, char* argv[]) {
     int centr_means_size = n_clusters + n_clusters;
     float CENTR_MEANS[centr_means_size];
     
-    omp_set_num_threads(n_threads);
-    
-
-    // not hot code
-    //#pragma omp parallel
-    //#pragma omp for
     for (int i = 0; i < centr_means_size; i++) {
         CENTR_MEANS[i]=0.0f;
-        
     }
         
 
     int end_flag = 1, n_loops = 0;
-    float begin = omp_get_wtime();
 
     initialize(n_points, n_clusters, n_threads);
     populate(n_points, n_clusters);
@@ -229,8 +197,6 @@ int main(int argc, char* argv[]) {
 
     for (end_flag = 1; (end_flag && n_loops <= 20); n_loops++) {
 
-        // not hot code
-        //#pragma omp parallel for
         for (int i = 0; i < n_clusters; i++) {
 
             CLUSTERS[i].dimension = 0;
@@ -241,8 +207,6 @@ int main(int argc, char* argv[]) {
     }
     --n_loops;
     
-    float end = omp_get_wtime();
-    float time_spent = (end-begin);
     printf("\n#> exec: %lf\n\n", time_spent);
     
     printf("N = %d, K = %d, T = %d", n_points, n_clusters, n_threads);
