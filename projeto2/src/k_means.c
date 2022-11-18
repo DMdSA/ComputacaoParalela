@@ -182,7 +182,7 @@ void update_cluster(struct cluster* cluster, int cluster_index, float* centroid_
  */
 void updateClusters(int klusters, float* centroid_mean_array) {
 
-    // simd aqui melhorou, acho
+    // simd aqui melhorou
     #pragma omp parallel
     #pragma omp for simd schedule(static)
     for (int i = 0; i < klusters; i++) {
@@ -222,16 +222,15 @@ int main(int argc, char* argv[]) {
 
     if (n_clusters > n_points) {
 
-        // k_means 1 1 and 2 2 are aborted...?
-
         fprintf(stderr, "\n#> Fatal: you can't have more clusters than points.\n");
         exit(3);
     }
     
+    // auxiliar array for each clusters' points sum
     int centr_means_size = n_clusters + n_clusters;
     float CENTR_MEANS[centr_means_size];
     
-    
+    // set number of threads to be used
     omp_set_num_threads(n_threads);
 
     // not hot code
@@ -241,10 +240,10 @@ int main(int argc, char* argv[]) {
         CENTR_MEANS[i]=0.0f;
     }
         
-
+    // algorithm end flag, number of loops variable
     int end_flag = 1, n_loops = 0;
 
-    float begin = omp_get_wtime();
+    //float begin = omp_get_wtime();
     initialize(n_points, n_clusters, n_threads);
     populate(n_points, n_clusters);
 
@@ -253,20 +252,22 @@ int main(int argc, char* argv[]) {
 
         // not hot code
         //#pragma omp parallel for
+        // update each cluster's dimension to zero
         for (int i = 0; i < n_clusters; i++) {
 
             CLUSTERS[i].dimension = 0;
         }
         
+        // ending flag
         end_flag = updateSamples(n_points, n_clusters, CENTR_MEANS);
         updateClusters(n_clusters, CENTR_MEANS);
     }
     --n_loops;
     
 
-    float end = omp_get_wtime();
-    float time_spent = (end-begin);
-    printf("\n#> exec: %lf\n\n", time_spent);
+    //float end = omp_get_wtime();
+    //float time_spent = (end-begin);
+    //printf("\n#> exec: %lf\n\n", time_spent);
     
     printf("N = %d, K = %d, T = %d", n_points, n_clusters, n_threads);
     for (int i = 0; i < n_clusters; i++) {
@@ -276,10 +277,6 @@ int main(int argc, char* argv[]) {
     printf("\nIterations: %d\n", n_loops);
 
 
-    /**
-     * if n_clusters <= 2, free aborts... (?)
-     * 
-     */
     free(CLUSTERS);
     free(RANDOM_SAMPLE);
     return 0;
