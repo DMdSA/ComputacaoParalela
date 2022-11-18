@@ -4,7 +4,7 @@ SRC = src/
 INCLUDES = include/
 EXEC = k_means
 EXEC_SEQ = k_means_seq
-THREADS = 2
+THREADS = 32
 
 CFLAGS = -O2 -g -Wall -fno-omit-frame-pointer -ffast-math -ftree-vectorize -mavx -fopt-info-vec-optimized #-fopt-info-vec-missed#-funroll-loops#-fopt-info-vec-missed#-fopt-info-vec-optimized -ftree-vectorizer-verbose=2 #-ffast-math -msse4 -march=native
 LIBS = -lm -fopenmp
