@@ -196,8 +196,6 @@ int main(int argc, char* argv[]) {
 
     if (n_clusters > n_points) {
 
-        // k_means 1 1 and 2 2 are aborted...?
-
         fprintf(stderr, "\n#> Fatal: you can't have more clusters than points.\n");
         exit(3);
     }
@@ -211,7 +209,7 @@ int main(int argc, char* argv[]) {
 
     int end_flag = 1, n_loops = 0;
 
-    float begin = omp_get_wtime();
+    //float begin = omp_get_wtime();
     initialize(n_points, n_clusters, n_threads);
     populate(n_points, n_clusters);
 
@@ -228,9 +226,9 @@ int main(int argc, char* argv[]) {
     --n_loops;
     
 
-    float end = omp_get_wtime();
-    float time_spent = (end-begin);
-    printf("\n#> exec: %lf\n\n", time_spent);
+    //float end = omp_get_wtime();
+    //float time_spent = (end-begin);
+    //printf("\n#> exec: %lf\n\n", time_spent);
     
     printf("N = %d, K = %d, T = %d", n_points, n_clusters, n_threads);
     for (int i = 0; i < n_clusters; i++) {
