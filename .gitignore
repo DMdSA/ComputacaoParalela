@@ -2,3 +2,5 @@
 projeto2/perf
 *.data
 *.o
+P03/.vscode/c_cpp_properties.json
+*.json
