@@ -59,7 +59,7 @@ int initialize(int n_points, int n_clusters) {
     //CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
     RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
     
-    if (!RANDOM_SAMPLE || !CLUSTERS) {
+    if (!RANDOM_SAMPLE) {
         fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes.\n");
         exit(2);
     }
@@ -129,37 +129,6 @@ void main_arg_control(int argc, char* argv[]) {
     }
 }
 
-
-void commitPointType() {
-    const int p_nitems=4;
-    int          p_blocklengths[4] = {1,1,1,1};
-    MPI_Datatype p_types[4] = {MPI_FLOAT, MPI_FLOAT, MPI_FLOAT, MPI_INT};
-    MPI_Datatype mpi_point;
-    MPI_Aint     p_offsets[4];
-
-    p_offsets[0] = offsetof(struct point, x);
-    p_offsets[1] = offsetof(struct point, y);
-    p_offsets[2] = offsetof(struct point, cluster_dist);
-    p_offsets[3] = offsetof(struct point, cluster);
-
-    MPI_Type_create_struct(p_nitems, p_blocklengths, p_offsets, p_types, &mpi_point);
-    MPI_Type_commit(&mpi_point);
-}
-
-void commitClusterType() {
-    const int c_nitems=3;
-    int          c_blocklengths[3] = {1,1,1};
-    MPI_Datatype c_types[3] = {MPI_FLOAT, MPI_FLOAT, MPI_INT};
-    MPI_Datatype mpi_cluster;
-    MPI_Aint     c_offsets[3];
-
-    c_offsets[0] = offsetof(struct cluster, x);
-    c_offsets[1] = offsetof(struct cluster, y);
-    c_offsets[2] = offsetof(struct cluster, dimension);
-
-    MPI_Type_create_struct(c_nitems, c_blocklengths, c_offsets, c_types, &mpi_cluster);
-    MPI_Type_commit(&mpi_cluster);
-}
 
 
 void showPoint(struct point p, int* rank){
@@ -304,17 +273,66 @@ int main(int argc, char* argv[]) {
 
     /**
      * Gather all partial data down to the root process
+     * 
+     * MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
+                        RANDOM_SAMPLE,number_points_per_proccess,
+                        mpi_point,0,MPI_COMM_WORLD)
     */
     // todo
 
 
 
     if (rank == 0) {
-        
-        free(CLUSTERS);
         free(RANDOM_SAMPLE);
     }
+    free(CLUSTERS);
     MPI_Finalize();
 
     return 0;
 }
+
+/*
+
+    -Inicio:                                                                            - done
+        - scatter dos pontos
+        - bcast dos clusters
+    
+    - Funcao Inicial (subset_pontos, clusters):                                         - @todo
+        for (i=0, i < nclusters; i++)
+            eachpoint : mindist
+
+    - Funcao lidar clusters (clusters, &arrayDistanciasAuxiliar):                       - @todo
+        - ReduceAll (clusters.dimensao e arrayDistancias) (sum)
+        - aqui, ja todos vao ter toda a info
+        - divisão e atualizar clusters
+    
+    - Funcao loop "otimizado" (subset_pontos, clusters) [int::flag]:                    - @todo
+        for (optimized):
+            min optimized
+
+    - Gather                                                                            - @todo
+        - resposta
+
+*/
+
+
+
+/*
+
+for (int i = (.cluster+1) % nclusters; i != .cluster; i = (i+1)%4) {
+}
+
+for (int i = .cluster+1; i < .cluster+nclusters; i++) {
+}
+
+.cluster = 0,  : 1, 2, 3
+.cluster = 1,  : 2, 3, 4%4=0
+
+.cluster = -1, : 0, 1, 2, 3 
+
+.cluster = 0,  : 1, 2, 3
+.cluster = 1,  : 2, 3, 0
+.cluster = 2,  : 3, 0, 1
+.cluster = 3,  : 0, 1, 2
+*/
+
