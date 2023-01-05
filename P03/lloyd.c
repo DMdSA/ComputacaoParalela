@@ -102,17 +102,15 @@ void populate(int n_points, int n_clusters) {
  * @param b point b
  * @return float distance
  */
-float distanceComparator(Point a, Point b) {
+float distanceComparator(struct point a, struct cluster b) {
 
-    float x = (b->x - a->x);
+    float x = (b.x - a.x);
     x *= x;
-    float y = (b->y - a->y);
+    float y = (b.y - a.y);
     y *= y;
 
     return y+x;
 }
-
-
 
 /**
  * @brief checks correct usage of program
@@ -128,7 +126,6 @@ void main_arg_control(int argc, char* argv[]) {
         exit(1);
     }
 }
-
 
 
 void showPoint(struct point p, int* rank){
@@ -148,6 +145,56 @@ void showCluster(struct cluster c, int* rank) {
 
 }
 
+int update_samples(struct point* SAMPLE_SUBSET, float* changes, int number_points_per_proccess, int n_clusters ){
+
+    struct point p = {0};
+    struct cluster c = {0};
+    float minDist, dist; 
+    int minK, lastK;
+    int change_flag = 1;
+    for(int i = 0; i < number_points_per_proccess; i++){
+            p = SAMPLE_SUBSET[i];
+            minDist = p.cluster_dist;
+            minK = lastK = p.cluster;
+
+            // 0 1 2 3, se o ultimo kluster for 1, começa no 2 e vai até 4 (4%4 = 0)
+            for(int d = lastK+1;d < lastK + n_clusters; d++){
+                c = CLUSTERS[d%n_clusters];
+                dist = distanceComparator(p,c); //Calculo da distância
+                //Se encontrar uma distância inferior à registada, substitui-a
+                if(minDist > dist ){
+                    minDist = dist;
+                    minK = d%n_clusters;
+                }
+            }
+
+            if(minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
+                changes[lastK]--;  //Alterações na dimensão
+                changes[minK]++;
+
+                SAMPLE_SUBSET[i].cluster = minK;    //Atualizar os valores do ponto
+                SAMPLE_SUBSET[i].cluster_dist = minDist;
+               change_flag = 1;
+            }
+            changes[minK+n_clusters] += p.x;   //Somar o X e o Y 
+            changes[minK+n_clusters+1] += p.y; 
+
+        }
+    return change_flag;
+}
+
+void updateCentroids(float* CENTER_MEANS, int klusters){
+        int index = 0, i = 0;
+        for (i = 0; i < klusters; i++) {
+
+        index = i+i;
+        CLUSTERS[i].dimension = CENTER_MEANS[i];
+        int dimension = CENTER_MEANS[i];
+        (CLUSTERS[i]).x = CENTER_MEANS[i+klusters] / (float)dimension;
+        (CLUSTERS[i]).y = CENTER_MEANS[i+(klusters*2)] / (float)dimension;
+    }
+}
+
 int main(int argc, char* argv[]) {
 
     // controll main arguments
@@ -158,6 +205,9 @@ int main(int argc, char* argv[]) {
     sscanf(argv[2], "%d", &n_clusters);
 
     printf("\n#> %d %d\n", n_points, n_clusters);
+    const int arraysize = n_clusters*2;
+    float CENTR_MEANS[arraysize];
+    float changes[n_clusters];
 
     if (n_clusters > n_points) {
 
@@ -252,34 +302,91 @@ int main(int argc, char* argv[]) {
                 , number_points_per_proccess, mpi_point
                 , 0, MPI_COMM_WORLD);
 
+    struct point p = {0};
+    struct cluster c = {0};
+    float minDist, dist; 
+    int minK, lastK;
+    int change_flag = 1;  
 
-    /**
-     * compute whatever is needed on received data
-    */
-    // todo
+     for(int i = 0; i < arraysize; i++){  //Reiniciar o array com os centros
+            CENTR_MEANS[i] = 0.0f;
+        }
+        for(int i = 0; i < n_clusters*3; i++){
+            changes[i] = (float) 0;
+        }
+    //First cicle because of the -1 in the points' default klusters
+    for(int i = 0; i < number_points_per_proccess; i++){
+            p = SAMPLE_SUBSET[i];
+            minDist = FLT_MAX;
+            minK = lastK = p.cluster;
 
-    /* this shit is working
-    printf("\n#> n_clusters from rank[%d] = %d\n", rank, n_clusters);
-    for (int i = 0; i < n_clusters; i++) {
+            // 0 1 2 3, se o ultimo kluster for 1, começa no 2 e vai até 4 (4%4 = 0)
+            for(int d = lastK+1;d < lastK + n_clusters; d++){
+                c = CLUSTERS[d%n_clusters];
+                dist = distanceComparator(p,c); //Calculo da distância
+                //Se encontrar uma distância inferior à registada, substitui-a
+                if(minDist > dist ){
+                    minDist = dist;
+                    minK = d%n_clusters;
+                }
+            }
 
-        showCluster(CLUSTERS[i], &rank);
+            if(minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
+                changes[minK]++;
+
+                SAMPLE_SUBSET[i].cluster = minK;    //Atualizar os valores do ponto
+                SAMPLE_SUBSET[i].cluster_dist = minDist;
+               change_flag = 1;
+            }
+            changes[minK+n_clusters] += p.x;   //Somar o X e o Y 
+            changes[minK+n_clusters+1] += p.y; 
+
+        }
+        /*
+    MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
+                        RANDOM_SAMPLE,number_points_per_proccess,
+                        mpi_point,0,MPI_COMM_WORLD);*/
+    for(int i = 0; i < n_clusters; i++){
+            CLUSTERS[i].dimension = (int) changes[i];
+        }
+        
+    MPI_Allreduce(MPI_IN_PLACE,changes,n_clusters,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+    
+    if(rank==0){
+        updateCentroids(changes,n_clusters);
     }
-    */
 
+
+    while(change_flag){  //Enquanto houverem alterações nos clusters
+
+        for(int i = 0; i < arraysize; i++){  //Reiniciar o array com os centros
+            CENTR_MEANS[i] = 0.0f;
+        }
+        for(int i = 0; i < n_clusters*3; i++){
+            changes[i] = (float) CLUSTERS[i].dimension;
+        }
+        change_flag = 0;
+
+        update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
+
+        for(int i = 0; i < n_clusters; i++){
+            CLUSTERS[i].dimension = (int) changes[i];
+        }
+        
+        MPI_Allreduce(MPI_IN_PLACE,changes,n_clusters,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+
+        if(rank==0){
+            updateCentroids(changes,n_clusters);
+        }
+    }
+    
     for (int i = 0; i < number_points_per_proccess; i++) {
         showPoint(SAMPLE_SUBSET[i], &rank);
     }
 
-
-    /**
-     * Gather all partial data down to the root process
-     * 
-     * MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
+    MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
                         RANDOM_SAMPLE,number_points_per_proccess,
-                        mpi_point,0,MPI_COMM_WORLD)
-    */
-    // todo
-
+                        mpi_point,0,MPI_COMM_WORLD);
 
 
     if (rank == 0) {
@@ -290,6 +397,55 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+
+/*
+void sumCentroids(float* CENTER_MEANS, const int samples, const int klusters){
+    const int arraysize = klusters*2;
+
+    for(int i = 0; i < arraysize; i++){
+        CENTER_MEANS[i] = 0.0f;
+    }
+    struct point p = {0};
+
+    int index = 0, i = 0;
+    for(i = 0; i < samples; i++) {
+
+        p = RANDOM_SAMPLE[i];
+        index = p.cluster + p.cluster;
+        CENTER_MEANS[index] += p.x;
+        CENTER_MEANS[index+1] += p.y;
+    }
+
+}*/
+
+    /**
+    printf("\n#> n_clusters from rank[%d] = %d\n", rank, n_clusters);
+    for (int i = 0; i < n_clusters; i++) {
+
+        showCluster(CLUSTERS[i], &rank);
+    }
+    */
+
+            /*
+            MPI_Allreduce(
+                    void* send_data,
+                    void* recv_data,
+                    int count,
+                    MPI_Datatype datatype,
+                    MPI_Op op,
+                    MPI_Comm communicator)*/
+
+    /**
+     * Gather all partial data down to the root process
+     * MPI_Gather( void* send_data, int send_count,
+                    MPI_Datatype send_datatype,
+                    void* recv_data,
+                    int recv_count,
+                    MPI_Datatype recv_datatype,
+                    int root,
+                    MPI_Comm communicator)
+    */
 
 /*
 
@@ -313,6 +469,7 @@ int main(int argc, char* argv[]) {
     - Gather                                                                            - @todo
         - resposta
 
+
 */
 
 
@@ -335,4 +492,3 @@ for (int i = .cluster+1; i < .cluster+nclusters; i++) {
 .cluster = 2,  : 3, 0, 1
 .cluster = 3,  : 0, 1, 2
 */
-
