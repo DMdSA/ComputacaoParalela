@@ -351,7 +351,7 @@ int main(int argc, char* argv[]) {
         }
         
     MPI_Allreduce(MPI_IN_PLACE,changes,n_clusters,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
-    
+
     if(rank==0){
         updateCentroids(changes,n_clusters);
     }
@@ -390,6 +390,10 @@ int main(int argc, char* argv[]) {
 
 
     if (rank == 0) {
+        for (int i = 0; i < n_clusters; i++) {
+    
+            printf("\nCenter: (%.3f, %.3f) : Size: %d", CLUSTERS[i].x, CLUSTERS[i].y, CLUSTERS[i].dimension);
+        }
         free(RANDOM_SAMPLE);
     }
     free(CLUSTERS);
