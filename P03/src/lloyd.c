@@ -17,55 +17,11 @@
 #include <mpi.h>
 #include <assert.h>
 
-/**
- * @brief struct of a point in space
- * 
- */
-struct point {
-
-    float x, y, cluster_dist;          // (x, y) values on space
-    int cluster;               // current associated cluster
-} ; 
-typedef struct point *Point;
-
-
-/**
- * @brief cluster struct
- * 
- */
-struct cluster {
-
-    float x, y;             // (x, y) from space
-    int dimension;          // number of points associated
-};
-
-typedef struct cluster *Cluster;
-
-
+#include "../include/point.h"
+#include "../include/cluster.h"
 
 struct point* RANDOM_SAMPLE;
 struct cluster* CLUSTERS;
-
-/**
- * @brief initialize points and clusters' arrays with necessary memory
- * 
- * @param n_points 
- * @param n_clusters 
- * @return int 0, if successfully allocated
- */
-int initialize(int n_points, int n_clusters) {
-
-    // clusters must be initialized for all threads..
-    //CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
-    RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
-    
-    if (!RANDOM_SAMPLE) {
-        fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes.\n");
-        exit(2);
-    }
-    return 0;
-}
-
 
 /**
  * @brief populate each points and clusters' arrays with random values
@@ -83,14 +39,14 @@ void populate(int n_points, int n_clusters) {
     for (; i < n_clusters; i++) {
 
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
-        RANDOM_SAMPLE[i] = (struct point) {.x = x, .y = y, .cluster_dist = FLT_MAX, .cluster = -1};
+        RANDOM_SAMPLE[i] = (struct point) {.x = x, .y = y, .cluster = -1};
         CLUSTERS[i] = (struct cluster) {.x = x, .y = y, .dimension = 0};
     }
     // remaining points
     for (int j = i; j < n_points; j++) {
 
         float x = (float) rand() / RAND_MAX, y = (float) rand() / RAND_MAX;
-        RANDOM_SAMPLE[j] = (struct point) {.x = x, .y = y, .cluster_dist = FLT_MAX, .cluster = -1};
+        RANDOM_SAMPLE[j] = (struct point) {.x = x, .y = y, .cluster = -1};
     }
     
 }
@@ -128,120 +84,116 @@ void main_arg_control(int argc, char* argv[]) {
 }
 
 
-void showPoint(struct point p, int* rank){
-
-    if (rank != NULL)
-        printf("\n#> Process[%d] - P(%.2f,%.2f,%.2f,%d)", *(rank), p.x, p.y, p.cluster_dist, p.cluster);
-    else
-        printf("\n#> P(%.2f,%.2f,%.2f,%d)", p.x, p.y, p.cluster_dist, p.cluster);
-}
-
-void showCluster(struct cluster c, int* rank) {
-    
-    if (rank != NULL)
-        printf("\n#> Process[%d] - C(%.2f, %.2f, %d)", *rank, c.x, c.y, c.dimension);
-    else
-        printf("\n#> C(%.2f, %.2f, %d)", c.x, c.y, c.dimension);
-
-}
-
 int update_samples(struct point* SAMPLE_SUBSET, float* changes, int number_points_per_proccess, int n_clusters ){
 
-    struct point p = {0};
-    struct cluster c = {0};
-    float minDist, dist; 
-    int minK, lastK;
-    int change_flag = 1;
+    int change_flag = 0;
+    
     for(int i = 0; i < number_points_per_proccess; i++){
-            p = SAMPLE_SUBSET[i];
-            minDist = p.cluster_dist;
+            
+            struct point p = SAMPLE_SUBSET[i];
+            float minDist = FLT_MAX;
+            int minK = 0, lastK = 0;
             minK = lastK = p.cluster;
 
+            struct cluster c = {0};
             // 0 1 2 3, se o ultimo kluster for 1, começa no 2 e vai até 4 (4%4 = 0)
-            for(int d = lastK+1;d < lastK + n_clusters; d++){
-                c = CLUSTERS[d%n_clusters];
-                dist = distanceComparator(p,c); //Calculo da distância
+            for(int d = 0; d < n_clusters; d++){
+                
+                c = CLUSTERS[d];
+                float dist = distanceComparator(p,c); //Calculo da distância
+                
                 //Se encontrar uma distância inferior à registada, substitui-a
                 if(minDist > dist ){
+                    
                     minDist = dist;
-                    minK = d%n_clusters;
+                    minK = d;
                 }
             }
 
-            if(minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
-                changes[lastK]--;  //Alterações na dimensão
-                changes[minK]++;
+            if (minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
+                
+                //--changes[lastK * 3];  //Alterações na dimensão
 
                 SAMPLE_SUBSET[i].cluster = minK;    //Atualizar os valores do ponto
-                SAMPLE_SUBSET[i].cluster_dist = minDist;
-               change_flag = 1;
+                change_flag = 1;
             }
-            changes[minK+n_clusters] += p.x;   //Somar o X e o Y 
-            changes[minK+n_clusters+1] += p.y; 
-
+            // {d, x, y}
+            ++changes[minK * 3];
+            changes[minK * 3 + 1] += p.x;   //Somar o X e o Y 
+            changes[minK * 3 + 2] += p.y; 
         }
+
     return change_flag;
 }
 
-void updateCentroids(float* CENTER_MEANS, int klusters){
-        int index = 0, i = 0;
-        for (i = 0; i < klusters; i++) {
 
-        index = i+i;
-        CLUSTERS[i].dimension = CENTER_MEANS[i];
-        int dimension = CENTER_MEANS[i];
-        (CLUSTERS[i]).x = CENTER_MEANS[i+klusters] / (float)dimension;
-        (CLUSTERS[i]).y = CENTER_MEANS[i+(klusters*2)] / (float)dimension;
+void first_update_samples(struct point* SAMPLE_SUBSET, float* changes, int number_points_per_proccess, int n_clusters ){
+
+    //First cicle because of the -1 in the points' default klusters
+    for(int i = 0; i < number_points_per_proccess; i++){
+            
+        struct point p = SAMPLE_SUBSET[i];
+        float minDist = FLT_MAX;
+        int minK = 0, lastK = 0;
+        minK = lastK = p.cluster;
+    
+        struct cluster c = {0};
+        // 0 1 2 3, se o ultimo kluster for 1, começa no 2 e vai até 4 (4%4 = 0)
+        for(int d = 0; d < n_clusters; d++){
+            
+            c = CLUSTERS[d];
+            float dist = distanceComparator(p, c); //Calculo da distância
+            
+            //Se encontrar uma distância inferior à registada, substitui-a
+            if(minDist > dist){
+                
+                minDist = dist;
+                minK = d;
+            }
+        }
+
+        if(minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
+        
+            ++changes[minK * 3];
+            SAMPLE_SUBSET[i].cluster = minK;    //Atualizar os valores do ponto
+        }
+        // {d, x, yf}
+        changes[minK * 3 + 1] += p.x;   //Somar o X e o Y 
+        changes[minK * 3 + 2] += p.y; 
     }
 }
 
-int main(int argc, char* argv[]) {
 
-    // controll main arguments
-    main_arg_control(argc, argv);
-    
-    int n_points = 0, n_clusters = 0;
-    sscanf(argv[1], "%d", &n_points);
-    sscanf(argv[2], "%d", &n_clusters);
-
-    printf("\n#> %d %d\n", n_points, n_clusters);
-    const int arraysize = n_clusters*2;
-    float CENTR_MEANS[arraysize];
-    float changes[n_clusters];
-
-    if (n_clusters > n_points) {
-
-        fprintf(stderr, "\n#> Fatal: you can't have more clusters than points.\n");
-        exit(3);
+void updateCentroids(float* changes, int klusters){
+        
+    for (int i = 0; i < klusters; i++) {
+        
+        int dimension = (CLUSTERS[i].dimension) = (int) changes[i*3];
+        //printf("\n#> %f %f %f\n", changes[i*3], changes[i*3+1], changes[i*3+2]);
+        (CLUSTERS[i]).x = changes[i*3 + 1] / (float)dimension;
+        (CLUSTERS[i]).y = changes[i*3 + 2] / (float)dimension;
     }
+}
 
-    // ---------------------------------------------------------
-
-    int size = 0, rank = 0;
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    // estudar a melhor alternativa
-    int number_points_per_proccess = n_points / size; 
+MPI_Datatype createMpiPoint() {
     
-    // commit struct dataypes for mpi
-    /* MPI_POINT */
-    const int p_nitems=4;
-    int          p_blocklengths[4] = {1,1,1,1};
-    MPI_Datatype p_types[4] = {MPI_FLOAT, MPI_FLOAT, MPI_FLOAT, MPI_INT};
+    const int p_nitems=3;
+    int          p_blocklengths[3] = {1,1,1};
+    MPI_Datatype p_types[3] = {MPI_FLOAT, MPI_FLOAT, MPI_INT};
     MPI_Datatype mpi_point;
-    MPI_Aint     p_offsets[4];
+    MPI_Aint     p_offsets[3];
 
     p_offsets[0] = offsetof(struct point, x);
     p_offsets[1] = offsetof(struct point, y);
-    p_offsets[2] = offsetof(struct point, cluster_dist);
-    p_offsets[3] = offsetof(struct point, cluster);
+    p_offsets[2] = offsetof(struct point, cluster);
 
     MPI_Type_create_struct(p_nitems, p_blocklengths, p_offsets, p_types, &mpi_point);
     MPI_Type_commit(&mpi_point);
-    
-    /* MPI_CLUSTER */
+    return mpi_point;
+}
+
+MPI_Datatype createMpiCluster() {
+
     const int c_nitems=3;
     int          c_blocklengths[3] = {1,1,1};
     MPI_Datatype c_types[3] = {MPI_FLOAT, MPI_FLOAT, MPI_INT};
@@ -254,20 +206,65 @@ int main(int argc, char* argv[]) {
 
     MPI_Type_create_struct(c_nitems, c_blocklengths, c_offsets, c_types, &mpi_cluster);
     MPI_Type_commit(&mpi_cluster);
+    return mpi_cluster;
+}
+
+int main(int argc, char* argv[]) {
+
+    // controll main arguments
+    //main_arg_control(argc, argv);
+    
+    int n_points = 0, n_clusters = 0;
+    sscanf(argv[1], "%d", &n_points);
+    sscanf(argv[2], "%d", &n_clusters);
+
+    if (n_clusters > n_points) {
+
+        fprintf(stderr, "\n#> Fatal: you can't have more clusters than points.\n");
+        exit(3);
+    }
+
+    // ---------------------------------------------------------
 
 
+    int size = 0, rank = 0;
+    // inicializar MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // estudar a melhor alternativa
+    int number_points_per_proccess = n_points / size; 
+    
+    // commit struct dataypes for mpi
+    /* MPI_POINT */
+    MPI_Datatype mpi_point = createMpiPoint();
+    /* MPI_CLUSTER */
+    MPI_Datatype mpi_cluster = createMpiCluster();
+    
+    // atribuir ranks
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // clusters must be initialized for all processes
+    // clusters space must be allocated for all processes
     CLUSTERS = (struct cluster*) malloc(sizeof(struct cluster) * n_clusters);
+    
+    if (!CLUSTERS) {
+            fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes for clusters.\n");
+            exit(2);
+    }
+    
     if (rank == 0) {
         
         // only "master"/root process will initialize and populate the
-        // random numbers sample and the clusters
+        // random numbers sample. The clusters will only be populated
 
-        initialize(n_points, n_clusters);
+        RANDOM_SAMPLE = (struct point*) malloc(sizeof(struct point) * n_points);
+    
+        if (!RANDOM_SAMPLE) {
+            fprintf(stderr, "\n#> Fatal: failed to allocate requested bytes for samples.\n");
+            exit(2);
+        }
+
         populate(n_points, n_clusters);
-        
     }
 
     /**
@@ -302,100 +299,68 @@ int main(int argc, char* argv[]) {
                 , number_points_per_proccess, mpi_point
                 , 0, MPI_COMM_WORLD);
 
-    struct point p = {0};
-    struct cluster c = {0};
-    float minDist, dist; 
-    int minK, lastK;
-    int change_flag = 1;  
 
-     for(int i = 0; i < arraysize; i++){  //Reiniciar o array com os centros
-            CENTR_MEANS[i] = 0.0f;
-        }
-        for(int i = 0; i < n_clusters*3; i++){
-            changes[i] = (float) 0;
-        }
+    // {d0, d1, d2, d3,  x0, x1, x2, x3,  y0, y1, y2, y3}
+    // {d0, x0, y0,   d1, x1, y1,    d2, x2, y1,   d3, x3, y3}
+    const int arraysize = n_clusters*3;
+    float changes[arraysize];
+    
+    for(int i = 0; i < arraysize; i++)
+        changes[i] = 0.0f;
+    
     //First cicle because of the -1 in the points' default klusters
-    for(int i = 0; i < number_points_per_proccess; i++){
-            p = SAMPLE_SUBSET[i];
-            minDist = FLT_MAX;
-            minK = lastK = p.cluster;
+    first_update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
 
-            // 0 1 2 3, se o ultimo kluster for 1, começa no 2 e vai até 4 (4%4 = 0)
-            for(int d = lastK+1;d < lastK + n_clusters; d++){
-                c = CLUSTERS[d%n_clusters];
-                dist = distanceComparator(p,c); //Calculo da distância
-                //Se encontrar uma distância inferior à registada, substitui-a
-                if(minDist > dist ){
-                    minDist = dist;
-                    minK = d%n_clusters;
-                }
-            }
+    // atualizar a dimensão de cada cluster, após a primeira iteração
+    for(int i = 0; i < n_clusters; i++)
+        CLUSTERS[i].dimension = (int) changes[i*3];
+    
+    // todos ficam com o mesmo array changes
+    MPI_Allreduce(MPI_IN_PLACE, changes, arraysize, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
-            if(minK != lastK){ //Se o cluster mais proximo for diferente do atual cluster do ponto
-                changes[minK]++;
+    // todos atualizam os centroids
+    updateCentroids(changes,n_clusters);
 
-                SAMPLE_SUBSET[i].cluster = minK;    //Atualizar os valores do ponto
-                SAMPLE_SUBSET[i].cluster_dist = minDist;
-               change_flag = 1;
-            }
-            changes[minK+n_clusters] += p.x;   //Somar o X e o Y 
-            changes[minK+n_clusters+1] += p.y; 
+    //if (rank == 0) {
+    //    for (int i = 0; i < n_clusters; i++) {
+    //
+    //        printf("\nCenter: (%.3f, %.3f) : Size: %d", CLUSTERS[i].x, CLUSTERS[i].y, (int)changes[i*3]);
+    //    }
+    //}
+    // ate aqui, tudo bem!
 
+    int change_flag = 1, iterations = 1;
+    while(change_flag) {  //Enquanto houverem alterações nos clusters
+
+        // reiniciar o array de changes
+        for(int i = 0; i < arraysize; i++) {
+            changes[i] = 0.0f;
         }
-        /*
-    MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
-                        RANDOM_SAMPLE,number_points_per_proccess,
-                        mpi_point,0,MPI_COMM_WORLD);*/
-    for(int i = 0; i < n_clusters; i++){
-            CLUSTERS[i].dimension = (int) changes[i];
-        }
+        change_flag = update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
         
-    MPI_Allreduce(MPI_IN_PLACE,changes,n_clusters,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &change_flag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    if(rank==0){
-        updateCentroids(changes,n_clusters);
-    }
+        if (change_flag != 0){
 
-
-    while(change_flag){  //Enquanto houverem alterações nos clusters
-
-        for(int i = 0; i < arraysize; i++){  //Reiniciar o array com os centros
-            CENTR_MEANS[i] = 0.0f;
-        }
-        for(int i = 0; i < n_clusters*3; i++){
-            changes[i] = (float) CLUSTERS[i].dimension;
-        }
-        change_flag = 0;
-
-        update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
-
-        for(int i = 0; i < n_clusters; i++){
-            CLUSTERS[i].dimension = (int) changes[i];
-        }
-        
-        MPI_Allreduce(MPI_IN_PLACE,changes,n_clusters,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
-
-        if(rank==0){
-            updateCentroids(changes,n_clusters);
+            MPI_Allreduce(MPI_IN_PLACE, changes, arraysize, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+            updateCentroids(changes, n_clusters);
+            iterations++;
         }
     }
     
-    for (int i = 0; i < number_points_per_proccess; i++) {
-        showPoint(SAMPLE_SUBSET[i], &rank);
-    }
-
-    MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
+     MPI_Gather(SAMPLE_SUBSET, number_points_per_proccess, mpi_point,
                         RANDOM_SAMPLE,number_points_per_proccess,
-                        mpi_point,0,MPI_COMM_WORLD);
-
-
+                        mpi_point, 0, MPI_COMM_WORLD);
+    
     if (rank == 0) {
         for (int i = 0; i < n_clusters; i++) {
     
             printf("\nCenter: (%.3f, %.3f) : Size: %d", CLUSTERS[i].x, CLUSTERS[i].y, CLUSTERS[i].dimension);
         }
+        printf("\n#> n iterations: %d\n", iterations);
         free(RANDOM_SAMPLE);
     }
+    free(SAMPLE_SUBSET);
     free(CLUSTERS);
     MPI_Finalize();
 
