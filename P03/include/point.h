@@ -7,8 +7,8 @@
  */
 struct point {
 
-    float x, y;          // (x, y) values on space
-    int cluster;               // current associated cluster
+    float x, y;             // (x, y) values on space
+    int cluster;            // current associated cluster
 } ; 
 typedef struct point *Point;
 
