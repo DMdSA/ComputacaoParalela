@@ -1,5 +1,5 @@
 /**
- * @file initialization.c
+ * @file lloyd.c
  * @author group a93313_a93180
  * @brief testing lloyd's initialization technique for random points and their clusters - mpi approach
  * @version 1.0
@@ -141,7 +141,7 @@ int update_samples(struct point* SAMPLE_SUBSET, float* changes, int number_point
  */
 void first_update_samples(struct point* SAMPLE_SUBSET, float* changes, int number_points_per_proccess, int n_clusters ){
 
-    //First cicle because of the -1 in the points' default klusters
+    //First cicle because of the -1 in the points' default clusters
     for(int i = 0; i < number_points_per_proccess; i++){
             
         float minDist = FLT_MAX;
@@ -174,7 +174,7 @@ void first_update_samples(struct point* SAMPLE_SUBSET, float* changes, int numbe
         }
         // {d, x, y}, {d, x, y}
         ++changes[minK * 3];
-        changes[minK * 3 + 1] += p.x;   //Somar o X e o Y 
+        changes[minK * 3 + 1] += p.x;
         changes[minK * 3 + 2] += p.y; 
     }
 }
@@ -365,7 +365,7 @@ int main(int argc, char* argv[]) {
         changes[i] = 0.0f;
 
     
-    //First cicle because of the -1 in the points' default klusters
+    //First cicle because of the -1 in the points' default clusters
     first_update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
 
     // update each cluster with new dimensions (after first iteration)
@@ -380,24 +380,24 @@ int main(int argc, char* argv[]) {
     updateCentroids(changes,n_clusters);
 
 
-    int change_flag = 1, iterations = 1;
+    int changes_flag = 1, iterations = 1;
 
     // while changes are being made
-    while(change_flag) {
+    while(changes_flag) {
 
-        // reset change's array
+        // reset changes array
         for(int i = 0; i < arraysize; i++) {
             changes[i] = 0.0f;
         }
 
         // update points' clusters
-        change_flag = update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
+        changes_flag = update_samples(SAMPLE_SUBSET, changes, number_points_per_proccess, n_clusters);
         
         // has any change been made by any of the clusters?
-        MPI_Allreduce(MPI_IN_PLACE, &change_flag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &changes_flag, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
         // if so, allreduce the changes arrays from all processes and then update the centroids
-        if (change_flag != 0){
+        if (changes_flag != 0){
 
             MPI_Allreduce(MPI_IN_PLACE, changes, arraysize, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
             updateCentroids(changes, n_clusters);
